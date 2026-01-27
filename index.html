@@ -1,0 +1,118 @@
+<div id="videoWidget" style="max-width:420px;margin:auto;font-family:system-ui;text-align:center;">
+
+  <div style="position:relative;">
+    <video id="preview" autoplay muted playsinline
+      style="width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:14px;background:black;">
+    </video>
+
+    <!-- Progress ring -->
+    <svg width="80" height="80"
+      style="position:absolute;top:10px;right:10px;transform:rotate(-90deg);">
+      <circle cx="40" cy="40" r="34"
+        stroke="#ffffff55" stroke-width="6" fill="none" />
+      <circle id="progressRing"
+        cx="40" cy="40" r="34"
+        stroke="#dc2626" stroke-width="6" fill="none"
+        stroke-linecap="round"
+        stroke-dasharray="213.6"
+        stroke-dashoffset="213.6" />
+    </svg>
+  </div>
+
+  <button id="recordBtn"
+    style="margin-top:14px;padding:12px 20px;font-size:16px;
+           border:none;border-radius:10px;
+           background:#dc2626;color:white;">
+    Record 15s
+  </button>
+
+  <p id="status" style="font-size:14px;color:#555;margin-top:8px;"></p>
+</div>
+
+<script>
+(() => {
+  const preview = document.getElementById("preview");
+  const recordBtn = document.getElementById("recordBtn");
+  const status = document.getElementById("status");
+  const ring = document.getElementById("progressRing");
+
+  const MAX_TIME = 15000;
+  const CIRCUMFERENCE = 213.6;
+
+  let recorder, chunks = [], startTime, timer;
+
+  function updateRing(elapsed) {
+    const progress = Math.min(elapsed / MAX_TIME, 1);
+    ring.style.strokeDashoffset =
+      CIRCUMFERENCE * (1 - progress);
+  }
+
+  async function record() {
+    status.textContent = "Requesting camera…";
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: "user",
+        aspectRatio: 9 / 16,
+        width: { ideal: 720 },
+        height: { ideal: 1280 }
+      },
+      audio: true
+    });
+
+    preview.srcObject = stream;
+
+    recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
+    chunks = [];
+
+    recorder.ondataavailable = e => {
+      if (e.data.size) chunks.push(e.data);
+    };
+
+    recorder.onstop = async () => {
+      clearInterval(timer);
+      ring.style.strokeDashoffset = CIRCUMFERENCE;
+      stream.getTracks().forEach(t => t.stop());
+
+      const blob = new Blob(chunks, { type: "video/webm" });
+      const file = new File([blob], "vertical-video.webm", {
+        type: "video/webm"
+      });
+
+      if (!navigator.canShare || !navigator.canShare({ files: [file] })) {
+        status.textContent = "Sharing not supported.";
+        return;
+      }
+
+      status.textContent = "Opening share menu…";
+
+      try {
+        await navigator.share({
+          title: "My video",
+          text: "Recorded on the web",
+          files: [file]
+        });
+        status.textContent = "Shared.";
+      } catch {
+        status.textContent = "Share cancelled.";
+      }
+    };
+
+    recorder.start();
+    startTime = Date.now();
+    status.textContent = "Recording…";
+
+    timer = setInterval(() => {
+      updateRing(Date.now() - startTime);
+    }, 100);
+
+    setTimeout(() => recorder.stop(), MAX_TIME);
+  }
+
+  recordBtn.addEventListener("click", () => {
+    recordBtn.disabled = true;
+    record();
+    setTimeout(() => recordBtn.disabled = false, MAX_TIME + 1000);
+  });
+})();
+</script>
