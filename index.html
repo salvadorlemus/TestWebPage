@@ -107,18 +107,30 @@ let recordedBlob;
 let startTime;
 let rafId;
 
-// Request camera only on user gesture
 recordBtn.addEventListener("click", async () => {
   if (!mediaRecorder) {
+    await lockOrientation();
     await initCamera();
     startRecording();
   }
 });
 
+async function lockOrientation() {
+  if (screen.orientation && screen.orientation.lock) {
+    try {
+      await screen.orientation.lock("portrait");
+    } catch (_) {
+      // iOS Safari ignores this — expected behavior
+    }
+  }
+}
+
 async function initCamera() {
   const stream = await navigator.mediaDevices.getUserMedia({
     video: {
       facingMode: "user",
+      width: { ideal: 720 },
+      height: { ideal: 1280 },
       aspectRatio: 9 / 16
     },
     audio: true
