@@ -140,8 +140,8 @@ async function initCamera() {
   const stream = await navigator.mediaDevices.getUserMedia({
     video: {
       facingMode: "user",
-      width:  { ideal: Math.round(width) },
-      height: { ideal: Math.round(height) },
+      width:  { ideal: Math.round(height) },
+      height: { ideal: Math.round(width) },
       aspectRatio: width / height
     },
     audio: true
