@@ -5,6 +5,7 @@
     height: 100%;
     background: black;
     overflow: hidden;
+    font-family: system-ui, sans-serif;
   }
 
   video {
@@ -44,6 +45,32 @@
     transform: translateX(-50%) rotate(-90deg);
     pointer-events: none;
   }
+
+  #actions {
+    position: fixed;
+    bottom: 140px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: none;
+    gap: 12px;
+  }
+
+  #actions button {
+    padding: 10px 16px;
+    font-size: 14px;
+    border-radius: 8px;
+    border: none;
+  }
+
+  #shareBtn {
+    background: #2563eb;
+    color: white;
+  }
+
+  #downloadBtn {
+    background: #374151;
+    color: white;
+  }
 </style>
 
 <video id="camera" autoplay muted playsinline></video>
@@ -61,11 +88,19 @@
 
 <div id="recordButton"></div>
 
+<div id="actions">
+  <button id="shareBtn">Share</button>
+  <button id="downloadBtn">Download</button>
+</div>
+
 <script>
 (() => {
   const video = document.getElementById("camera");
-  const button = document.getElementById("recordButton");
+  const recordBtn = document.getElementById("recordButton");
   const ring = document.getElementById("progress");
+  const actions = document.getElementById("actions");
+  const shareBtn = document.getElementById("shareBtn");
+  const downloadBtn = document.getElementById("downloadBtn");
 
   const MAX_TIME = 15000;
   const CIRC = 326.7;
@@ -73,6 +108,7 @@
   let stream;
   let recorder;
   let chunks = [];
+  let recordedBlob;
   let timer;
   let startTime;
 
@@ -93,12 +129,37 @@
     ring.style.strokeDashoffset = CIRC * (1 - p);
   }
 
+  function downloadVideo() {
+    const url = URL.createObjectURL(recordedBlob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "video-15s.webm";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function tryShare(file) {
+    if (!navigator.canShare || !navigator.canShare({ files: [file] })) {
+      return false;
+    }
+    try {
+      await navigator.share({
+        title: "My video",
+        files: [file]
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async function startRecording() {
     await initCamera();
 
+    actions.style.display = "none";
     chunks = [];
     ring.style.strokeDashoffset = CIRC;
-    button.style.pointerEvents = "none";
+    recordBtn.style.pointerEvents = "none";
 
     recorder = new MediaRecorder(stream);
     recorder.ondataavailable = e => e.data.size && chunks.push(e.data);
@@ -106,23 +167,18 @@
     recorder.onstop = async () => {
       clearInterval(timer);
 
-      const blob = new Blob(chunks, { type: recorder.mimeType });
-      const file = new File([blob], "video-15s", { type: blob.type });
+      recordedBlob = new Blob(chunks, { type: recorder.mimeType });
+      const file = new File([recordedBlob], "video-15s.webm", {
+        type: recordedBlob.type
+      });
 
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share({
-            title: "My video",
-            files: [file]
-          });
-        } catch (err) {
-          console.warn("Share cancelled or failed", err);
-        }
-      } else {
-        alert("Sharing is not supported on this device.");
+      const shared = await tryShare(file);
+
+      if (!shared) {
+        actions.style.display = "flex";
       }
 
-      button.style.pointerEvents = "auto";
+      recordBtn.style.pointerEvents = "auto";
       ring.style.strokeDashoffset = CIRC;
     };
 
@@ -136,6 +192,10 @@
     setTimeout(() => recorder.stop(), MAX_TIME);
   }
 
-  button.addEventListener("click", startRecording);
+  recordBtn.addEventListener("click", startRecording);
+  shareBtn.addEventListener("click", () => tryShare(
+    new File([recordedBlob], "video-15s.webm", { type: recordedBlob.type })
+  ));
+  downloadBtn.addEventListener("click", downloadVideo);
 })();
 </script>
