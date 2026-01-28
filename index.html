@@ -1,55 +1,82 @@
-<div id="videoWidget" style="max-width:420px;margin:auto;font-family:system-ui;text-align:center;">
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: black;
+    overflow: hidden;
+    font-family: system-ui, sans-serif;
+  }
 
-  <div style="position:relative;">
-    <video id="preview" autoplay muted playsinline
-      style="width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:14px;background:black;">
-    </video>
+  #camera {
+    position: fixed;
+    inset: 0;
+    object-fit: cover;
+    width: 100%;
+    height: 100%;
+    background: black;
+  }
 
-    <!-- Progress ring -->
-    <svg width="80" height="80"
-      style="position:absolute;top:10px;right:10px;transform:rotate(-90deg);">
-      <circle cx="40" cy="40" r="34"
-        stroke="#ffffff55" stroke-width="6" fill="none" />
-      <circle id="progressRing"
-        cx="40" cy="40" r="34"
-        stroke="#dc2626" stroke-width="6" fill="none"
-        stroke-linecap="round"
-        stroke-dasharray="213.6"
-        stroke-dashoffset="213.6" />
-    </svg>
-  </div>
+  #recordButton {
+    position: fixed;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 84px;
+    height: 84px;
+    border-radius: 50%;
+    background: #dc2626;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
 
-  <button id="recordBtn"
-    style="margin-top:14px;padding:12px 20px;font-size:16px;
-           border:none;border-radius:10px;
-           background:#dc2626;color:white;">
-    Record 15s
-  </button>
+  #recordButton::after {
+    content: "";
+    width: 56px;
+    height: 56px;
+    background: white;
+    border-radius: 50%;
+  }
 
-  <p id="status" style="font-size:14px;color:#555;margin-top:8px;"></p>
-</div>
+  svg {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) rotate(-90deg);
+    pointer-events: none;
+  }
+</style>
+
+<video id="camera" autoplay muted playsinline></video>
+
+<!-- Progress ring -->
+<svg width="120" height="120">
+  <circle cx="60" cy="60" r="52"
+    stroke="#ffffff55" stroke-width="6" fill="none" />
+  <circle id="progress"
+    cx="60" cy="60" r="52"
+    stroke="#dc2626" stroke-width="6" fill="none"
+    stroke-linecap="round"
+    stroke-dasharray="326.7"
+    stroke-dashoffset="326.7" />
+</svg>
+
+<div id="recordButton"></div>
 
 <script>
 (() => {
-  const preview = document.getElementById("preview");
-  const recordBtn = document.getElementById("recordBtn");
-  const status = document.getElementById("status");
-  const ring = document.getElementById("progressRing");
+  const video = document.getElementById("camera");
+  const button = document.getElementById("recordButton");
+  const ring = document.getElementById("progress");
 
   const MAX_TIME = 15000;
-  const CIRCUMFERENCE = 213.6;
+  const CIRC = 326.7;
 
   let recorder, chunks = [], startTime, timer;
 
-  function updateRing(elapsed) {
-    const progress = Math.min(elapsed / MAX_TIME, 1);
-    ring.style.strokeDashoffset =
-      CIRCUMFERENCE * (1 - progress);
-  }
-
-  async function record() {
-    status.textContent = "Requesting camera…";
-
+  async function initCamera() {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: "user",
@@ -59,60 +86,56 @@
       },
       audio: true
     });
+    video.srcObject = stream;
+    return stream;
+  }
 
-    preview.srcObject = stream;
+  function updateRing(elapsed) {
+    const p = Math.min(elapsed / MAX_TIME, 1);
+    ring.style.strokeDashoffset = CIRC * (1 - p);
+  }
 
-    recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
+  async function startRecording() {
+    button.style.pointerEvents = "none";
+    ring.style.strokeDashoffset = CIRC;
+
+    const stream = await initCamera();
     chunks = [];
 
-    recorder.ondataavailable = e => {
-      if (e.data.size) chunks.push(e.data);
-    };
+    recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
+
+    recorder.ondataavailable = e => e.data.size && chunks.push(e.data);
 
     recorder.onstop = async () => {
       clearInterval(timer);
-      ring.style.strokeDashoffset = CIRCUMFERENCE;
       stream.getTracks().forEach(t => t.stop());
 
       const blob = new Blob(chunks, { type: "video/webm" });
-      const file = new File([blob], "vertical-video.webm", {
+      const file = new File([blob], "video-15s.webm", {
         type: "video/webm"
       });
 
-      if (!navigator.canShare || !navigator.canShare({ files: [file] })) {
-        status.textContent = "Sharing not supported.";
-        return;
-      }
-
-      status.textContent = "Opening share menu…";
-
-      try {
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
           title: "My video",
-          text: "Recorded on the web",
           files: [file]
         });
-        status.textContent = "Shared.";
-      } catch {
-        status.textContent = "Share cancelled.";
       }
+
+      button.style.pointerEvents = "auto";
+      ring.style.strokeDashoffset = CIRC;
     };
 
     recorder.start();
     startTime = Date.now();
-    status.textContent = "Recording…";
 
     timer = setInterval(() => {
       updateRing(Date.now() - startTime);
-    }, 100);
+    }, 50);
 
     setTimeout(() => recorder.stop(), MAX_TIME);
   }
 
-  recordBtn.addEventListener("click", () => {
-    recordBtn.disabled = true;
-    record();
-    setTimeout(() => recordBtn.disabled = false, MAX_TIME + 1000);
-  });
+  button.addEventListener("click", startRecording);
 })();
 </script>
