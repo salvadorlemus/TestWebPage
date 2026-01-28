@@ -5,13 +5,11 @@
     height: 100%;
     background: black;
     overflow: hidden;
-    font-family: system-ui, sans-serif;
   }
 
-  #camera {
+  video {
     position: fixed;
     inset: 0;
-    object-fit: cover;
     width: 100%;
     height: 100%;
     background: black;
@@ -22,27 +20,26 @@
     bottom: 32px;
     left: 50%;
     transform: translateX(-50%);
-    width: 84px;
-    height: 84px;
+    width: 90px;
+    height: 90px;
     border-radius: 50%;
     background: #dc2626;
     display: flex;
     align-items: center;
     justify-content: center;
-    cursor: pointer;
   }
 
   #recordButton::after {
     content: "";
-    width: 56px;
-    height: 56px;
+    width: 60px;
+    height: 60px;
     background: white;
     border-radius: 50%;
   }
 
   svg {
     position: fixed;
-    bottom: 24px;
+    bottom: 20px;
     left: 50%;
     transform: translateX(-50%) rotate(-90deg);
     pointer-events: none;
@@ -51,7 +48,6 @@
 
 <video id="camera" autoplay muted playsinline></video>
 
-<!-- Progress ring -->
 <svg width="120" height="120">
   <circle cx="60" cy="60" r="52"
     stroke="#ffffff55" stroke-width="6" fill="none" />
@@ -74,18 +70,20 @@
   const MAX_TIME = 15000;
   const CIRC = 326.7;
 
-  let recorder, chunks = [], startTime, timer;
+  let stream;
+  let recorder;
+  let chunks = [];
+  let timer;
+  let startTime;
 
   async function initCamera() {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: "user",
-        aspectRatio: 9 / 16,
-        width: { ideal: 720 },
-        height: { ideal: 1280 }
-      },
+    if (stream) return stream;
+
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "user" },
       audio: true
     });
+
     video.srcObject = stream;
     return stream;
   }
@@ -96,30 +94,32 @@
   }
 
   async function startRecording() {
-    button.style.pointerEvents = "none";
-    ring.style.strokeDashoffset = CIRC;
+    await initCamera();
 
-    const stream = await initCamera();
     chunks = [];
+    ring.style.strokeDashoffset = CIRC;
+    button.style.pointerEvents = "none";
 
-    recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
-
+    recorder = new MediaRecorder(stream);
     recorder.ondataavailable = e => e.data.size && chunks.push(e.data);
 
     recorder.onstop = async () => {
       clearInterval(timer);
-      stream.getTracks().forEach(t => t.stop());
 
-      const blob = new Blob(chunks, { type: "video/webm" });
-      const file = new File([blob], "video-15s.webm", {
-        type: "video/webm"
-      });
+      const blob = new Blob(chunks, { type: recorder.mimeType });
+      const file = new File([blob], "video-15s", { type: blob.type });
 
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          title: "My video",
-          files: [file]
-        });
+        try {
+          await navigator.share({
+            title: "My video",
+            files: [file]
+          });
+        } catch (err) {
+          console.warn("Share cancelled or failed", err);
+        }
+      } else {
+        alert("Sharing is not supported on this device.");
       }
 
       button.style.pointerEvents = "auto";
